@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>クイズアプリ（データ共有対応版）</title>
+    <title>クイズアプリ</title>
     <style>
         body { font-family: sans-serif; background-color: #f0f8ff; margin: 0; padding: 20px; color: #333; }
         
@@ -22,7 +22,7 @@
         .create-set-box input { flex-grow: 1; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
         .create-set-box button { padding: 10px 20px; font-size: 16px; background-color: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; }
 
-        /* ★追加：共有機能エリアのスタイル */
+        /* 共有機能エリアのスタイル */
         .share-box { margin-top: 40px; padding-top: 20px; border-top: 2px solid #eee; text-align: center; background-color: #fafafa; border-radius: 8px; padding-bottom: 20px; }
         .share-box h3 { font-size: 16px; margin-top: 0; color: #555; }
         .share-buttons button { margin: 5px; padding: 10px 15px; background-color: #607d8b; color: white; border: none; border-radius: 6px; cursor: pointer; }
@@ -83,7 +83,7 @@
             <button onclick="createNewSet()">＋ 作成</button>
         </div>
 
-        <!-- ★追加：共有機能エリア -->
+        <!-- 共有機能エリア -->
         <div class="share-box">
             <h3>🤝 友達とクイズを共有する</h3>
             <div class="share-buttons">
@@ -99,7 +99,7 @@
         </div>
     </div>
 
-    <!-- クイズ画面（変更なし） -->
+    <!-- クイズ画面 -->
     <div id="quiz-view" class="view">
         <div class="quiz-view-header">
             <button class="back-btn" onclick="goHome()">← ホームに戻る</button>
@@ -155,7 +155,7 @@
     </div>
 
     <script>
-        // --- 1. データ管理 ---
+        // --- データ管理 ---
         let quizSets = [];
         let currentSetIndex = -1;
         let currentIndex = 0;
@@ -173,7 +173,7 @@
         }
         function saveData() { localStorage.setItem('myQuizSets', JSON.stringify(quizSets)); }
 
-        // --- 2. ホーム画面と共有機能 ---
+        // --- ホーム画面と共有機能 ---
         function renderHome() {
             const listElement = document.getElementById('quiz-set-list');
             listElement.innerHTML = ''; 
@@ -190,7 +190,6 @@
                 delBtn.onclick = () => deleteQuizSet(index);
                 li.appendChild(playBtn); li.appendChild(delBtn); listElement.appendChild(li);
             });
-            // 共有エリアを閉じておく
             document.getElementById('share-area').style.display = 'none';
         }
 
@@ -207,7 +206,6 @@
             }
         }
 
-        // ★追加：エクスポート（書き出し）機能
         function showExport() {
             const area = document.getElementById('share-area');
             const text = document.getElementById('share-text');
@@ -215,7 +213,6 @@
             area.style.display = 'block';
             document.getElementById('share-message').textContent = '下の文字をすべてコピーして、友達にLINE等で送ってください。';
             
-            // データを文字に変換してテキストボックスに入れる
             text.value = JSON.stringify(quizSets);
             text.readOnly = true; 
             
@@ -227,7 +224,6 @@
             };
         }
 
-        // ★追加：インポート（読み込み）機能
         function showImport() {
             const area = document.getElementById('share-area');
             const text = document.getElementById('share-text');
@@ -243,7 +239,6 @@
                 try {
                     const importedData = JSON.parse(text.value);
                     if (Array.isArray(importedData)) {
-                        // 今のデータに、もらったデータを合体させる
                         quizSets = quizSets.concat(importedData);
                         saveData();
                         renderHome();
@@ -257,7 +252,7 @@
             };
         }
 
-        // --- 3. 画面の切り替え ---
+        // --- 画面の切り替え ---
         function openQuizSet(index) {
             currentSetIndex = index; currentIndex = 0; correctCount = 0; cancelEdit(); 
             document.getElementById('home-view').classList.remove('active');
@@ -272,7 +267,7 @@
             renderHome();
         }
 
-        // --- 4. クイズの表示と判定 ---
+        // --- クイズの表示と判定 ---
         function displayQuiz() {
             isAnswered = false; 
             document.getElementById('edit-controls').style.display = 'block'; 
@@ -329,19 +324,39 @@
             } else { showResult(); }
         }
 
+        // ★変更点：結果画面の表示
         function showResult() {
             const total = quizSets[currentSetIndex].quizzes.length;
             document.getElementById('quiz-status').textContent = "クイズ終了！";
             document.getElementById('quiz-title').textContent = "🎉 結果発表 🎉";
             document.getElementById('result').textContent = "";
             document.getElementById('edit-controls').style.display = 'none'; 
-            document.getElementById('quiz-choices').innerHTML = `<div class="result-score">${total}問中 <span>${correctCount}</span> 問正解！</div><div class="result-rate">正答率: ${Math.round((correctCount / total) * 100)}%</div>`;
-            const nextBtn = document.getElementById('next-button');
-            nextBtn.textContent = "🔄 もう一度遊ぶ";
-            nextBtn.onclick = () => { currentIndex = 0; correctCount = 0; document.getElementById('next-button').onclick = handleNextAction; displayQuiz(); };
+            
+            // スコア表示
+            let html = `<div class="result-score">${total}問中 <span>${correctCount}</span> 問正解！</div>`;
+            html += `<div class="result-rate">正答率: ${Math.round((correctCount / total) * 100)}%</div>`;
+            
+            // アクションボタン（もう一度遊ぶ ＆ ホームに戻る）
+            html += `<div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+                        <button onclick="restartQuiz()" style="padding: 12px; font-size: 16px; background-color: #ff9800; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">🔄 もう一度遊ぶ</button>
+                        <button onclick="goHome()" style="padding: 12px; font-size: 16px; background-color: #607d8b; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">🏠 ホームに戻る</button>
+                     </div>`;
+            
+            document.getElementById('quiz-choices').innerHTML = html;
+            
+            // 従来の「次の問題へ」ボタンは隠しておく
+            document.getElementById('next-button').style.display = 'none';
         }
 
-        // --- 5. 編集・追加機能 ---
+        // ★追加：「もう一度遊ぶ」用の新しい関数
+        function restartQuiz() {
+            currentIndex = 0; 
+            correctCount = 0; 
+            document.getElementById('next-button').onclick = handleNextAction; 
+            displayQuiz(); 
+        }
+
+        // --- 編集・追加機能 ---
         function toggleForm() {
             const type = document.querySelector('input[name="quiz-type"]:checked').value;
             document.getElementById('choice-input-area').style.display = (type === 'choice') ? 'block' : 'none';
