@@ -2,23 +2,32 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>リアルタイム同期クイズアプリ</title>
-    <!-- Firebase SDK (Compat版) の読み込み -->
+    <title>ログイン機能付きクイズアプリ</title>
+    <!-- Firebase SDK (App, Firestore, Auth) の読み込み -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <style>
         body { font-family: sans-serif; background-color: #f0f8ff; margin: 0; padding: 20px; color: #333; }
         
-        /* 画面切り替え */
         .view { display: none; }
         .view.active { display: block; }
+
+        /* ヘッダーエリア（ログイン状態表示） */
+        .auth-bar { max-width: 600px; margin: 0 auto 15px auto; display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .user-info { font-size: 14px; font-weight: bold; color: #555; }
+        .auth-btn { padding: 8px 16px; font-size: 14px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .login-btn { background-color: #4285f4; color: white; }
+        .logout-btn { background-color: #757575; color: white; }
 
         /* ホーム画面 */
         #home-view { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .status-badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; background-color: #4caf50; color: white; margin-bottom: 15px; }
         .set-list { list-style: none; padding: 0; }
         .set-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #eee; }
-        .set-item button.play-btn { font-size: 18px; padding: 10px 20px; background-color: #00bcd4; color: white; border: none; border-radius: 6px; cursor: pointer; flex-grow: 1; text-align: left; margin-right: 10px; transition: 0.2s; }
+        .set-info { flex-grow: 1; margin-right: 10px; }
+        .set-author { font-size: 12px; color: #888; margin-top: 4px; }
+        .set-item button.play-btn { width: 100%; font-size: 18px; padding: 10px 15px; background-color: #00bcd4; color: white; border: none; border-radius: 6px; cursor: pointer; text-align: left; transition: 0.2s; }
         .set-item button.play-btn:hover { background-color: #0097a7; }
         .set-item button.del-set-btn { font-size: 14px; padding: 10px; background-color: #f44336; color: white; border: none; border-radius: 6px; cursor: pointer; }
         
@@ -67,9 +76,15 @@
 </head>
 <body>
 
+    <!-- ログイン管理バー -->
+    <div class="auth-bar">
+        <div id="user-info" class="user-info">ゲスト閲覧中</div>
+        <button id="auth-btn" class="auth-btn login-btn" onclick="toggleAuth()">Googleでログイン</button>
+    </div>
+
     <!-- ホーム画面 -->
     <div id="home-view" class="view active">
-        <span class="status-badge">⚡ Firebase リアルタイム同期中</span>
+        <span class="status-badge">⚡ リアルタイム同期中</span>
         <h2>📚 クイズ集一覧</h2>
         <ul id="quiz-set-list" class="set-list"></ul>
         <div class="create-set-box">
@@ -134,7 +149,7 @@
 
     <script>
         // --- Firebase 初期化 ---
-        /* ⚠️ ここをご自身のFirebase設定に置き換えてください */
+        /* ⚠️ ご自身のFirebase設定を貼り付けてください */
         const firebaseConfig = {
   apiKey: "AIzaSyDWBeeMvqY-thtzyYlK4MoKemcJHYZG4cc",
   authDomain: "quiz-app-ver1.firebaseapp.com",
@@ -145,6 +160,38 @@
 };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // --- ログイン状態の監視 ---
+        let currentUser = null;
+
+        auth.onAuthStateChanged((user) => {
+            currentUser = user;
+            const userInfoEl = document.getElementById('user-info');
+            const authBtnEl = document.getElementById('auth-btn');
+
+            if (user) {
+                userInfoEl.textContent = `👤 ${user.displayName || user.email}`;
+                authBtnEl.textContent = "ログアウト";
+                authBtnEl.className = "auth-btn logout-btn";
+            } else {
+                userInfoEl.textContent = "ゲスト閲覧中";
+                authBtnEl.textContent = "Googleでログイン";
+                authBtnEl.className = "auth-btn login-btn";
+            }
+        });
+
+        // ログイン・ログアウトの切替
+        function toggleAuth() {
+            if (currentUser) {
+                auth.signOut();
+            } else {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                auth.signInWithPopup(provider).catch((error) => {
+                    alert("ログインエラー: " + error.message);
+                });
+            }
+        }
 
         // --- データ管理変数 ---
         let quizSets = [];
@@ -155,7 +202,7 @@
         let correctCount = 0;
         let isAnswered = false;
 
-        // --- Firebase リアルタイム監視 (onSnapshot) ---
+        // --- Firebase リアルタイム監視 ---
         db.collection("quizSets").orderBy("createdAt", "asc").onSnapshot((snapshot) => {
             quizSets = [];
             snapshot.forEach((doc) => {
@@ -163,7 +210,6 @@
             });
             renderHome();
             
-            // 現在クイズ画面を開いている場合は、最新のデータで再描画
             if (currentSetIndex !== -1 && quizSets[currentSetIndex]) {
                 if (currentIndex >= quizSets[currentSetIndex].quizzes.length) {
                     currentIndex = Math.max(0, quizSets[currentSetIndex].quizzes.length - 1);
@@ -172,27 +218,47 @@
             }
         });
 
-        // --- ホーム画面描画 ---
+        // --- ホーム画面描画（作成者名を表示） ---
         function renderHome() {
             const listElement = document.getElementById('quiz-set-list');
             listElement.innerHTML = ''; 
             quizSets.forEach((quizSet, index) => {
                 const li = document.createElement('li');
                 li.className = 'set-item';
+                
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'set-info';
+
                 const playBtn = document.createElement('button');
                 playBtn.className = 'play-btn';
                 playBtn.textContent = `${quizSet.title} (全${quizSet.quizzes.length}問)`;
                 playBtn.onclick = () => openQuizSet(index);
+
+                const authorDiv = document.createElement('div');
+                authorDiv.className = 'set-author';
+                authorDiv.textContent = `作成者: ${quizSet.authorName || '匿名'}`;
+
+                infoDiv.appendChild(playBtn);
+                infoDiv.appendChild(authorDiv);
+
                 const delBtn = document.createElement('button');
                 delBtn.className = 'del-set-btn';
                 delBtn.textContent = '削除';
                 delBtn.onclick = () => deleteQuizSet(quizSet.id, quizSet.title);
-                li.appendChild(playBtn); li.appendChild(delBtn); listElement.appendChild(li);
+
+                li.appendChild(infoDiv); 
+                li.appendChild(delBtn); 
+                listElement.appendChild(li);
             });
         }
 
-        // --- クイズ集の操作 (クラウド同期) ---
+        // --- クイズ集の操作 ---
         async function createNewSet() {
+            if (!currentUser) {
+                alert("クイズ集を作成するにはログインが必要です！");
+                return;
+            }
+
             const titleInput = document.getElementById('new-set-title');
             const title = titleInput.value.trim();
             if (title === "") { alert("クイズ集の名前を入力してください。"); return; }
@@ -200,12 +266,18 @@
             await db.collection("quizSets").add({
                 title: title,
                 quizzes: [{ type: "choice", question: "最初の問題！", choices: ["A", "B"], correctAnswer: "A" }],
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                authorName: currentUser.displayName || currentUser.email,
+                authorId: currentUser.uid
             });
             titleInput.value = '';
         }
 
         async function deleteQuizSet(docId, title) {
+            if (!currentUser) {
+                alert("削除するにはログインが必要です！");
+                return;
+            }
             if (confirm(`「${title}」を本当に削除しますか？`)) {
                 await db.collection("quizSets").doc(docId).delete();
             }
@@ -223,10 +295,11 @@
         function goHome() {
             currentSetIndex = -1;
             document.getElementById('quiz-view').classList.remove('active');
+            document.getElementById('home-view').classList.active;
             document.getElementById('home-view').classList.add('active');
         }
 
-        // --- クイズの表示・判定 ---
+        // --- クイズ表示・判定 ---
         function displayQuiz() {
             isAnswered = false; 
             document.getElementById('edit-controls').style.display = 'block'; 
@@ -311,7 +384,7 @@
             currentIndex = 0; correctCount = 0; displayQuiz(); 
         }
 
-        // --- フォーム・編集操作 ---
+        // --- 編集・作成処理 ---
         function toggleForm() {
             const type = document.querySelector('input[name="quiz-type"]:checked').value;
             document.getElementById('choice-input-area').style.display = (type === 'choice') ? 'block' : 'none';
@@ -328,6 +401,7 @@
             if (list.children.length > 2) list.removeChild(list.lastElementChild);
         }
         function startEdit() {
+            if (!currentUser) { alert("編集するにはログインが必要です！"); return; }
             isEditMode = true; editTargetIndex = currentIndex;
             const targetQuiz = quizSets[currentSetIndex].quizzes[currentIndex];
             document.getElementById('form-title').textContent = "📝 クイズを編集する";
@@ -360,6 +434,7 @@
         }
 
         async function submitQuiz() {
+            if (!currentUser) { alert("問題を追加・編集するにはログインが必要です！"); return; }
             const type = document.querySelector('input[name="quiz-type"]:checked').value;
             const questionText = document.getElementById('new-question').value;
             if (questionText === "") { alert("問題文を入力してください！"); return; }
@@ -388,7 +463,6 @@
                 currentQuizzes.push(newQuiz);
             }
 
-            // Cloud Firestore のデータを更新
             await db.collection("quizSets").doc(quizSets[currentSetIndex].id).update({
                 quizzes: currentQuizzes
             });
@@ -397,6 +471,7 @@
         }
 
         async function deleteQuiz() {
+            if (!currentUser) { alert("削除するにはログインが必要です！"); return; }
             const currentQuizzes = [...quizSets[currentSetIndex].quizzes];
             if (currentQuizzes.length === 1) { alert("最後の1問は削除できません！"); return; }
             if (confirm("本当にこの問題を削除しますか？")) {
