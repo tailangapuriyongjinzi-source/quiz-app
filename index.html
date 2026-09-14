@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>クイズアプリ（データ共有対応版）</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f8ff; margin: 0; padding: 20px; color: #333; }
+        
+        /* 画面切り替え */
+        .view { display: none; }
+        .view.active { display: block; }
+
+        /* ホーム画面 */
+        #home-view { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .set-list { list-style: none; padding: 0; }
+        .set-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #eee; }
+        .set-item button.play-btn { font-size: 18px; padding: 10px 20px; background-color: #00bcd4; color: white; border: none; border-radius: 6px; cursor: pointer; flex-grow: 1; text-align: left; margin-right: 10px; transition: 0.2s; }
+        .set-item button.play-btn:hover { background-color: #0097a7; }
+        .set-item button.del-set-btn { font-size: 14px; padding: 10px; background-color: #f44336; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        
+        .create-set-box { margin-top: 30px; padding-top: 20px; border-top: 2px dashed #ccc; display: flex; gap: 10px; }
+        .create-set-box input { flex-grow: 1; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+        .create-set-box button { padding: 10px 20px; font-size: 16px; background-color: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; }
+
+        /* ★追加：共有機能エリアのスタイル */
+        .share-box { margin-top: 40px; padding-top: 20px; border-top: 2px solid #eee; text-align: center; background-color: #fafafa; border-radius: 8px; padding-bottom: 20px; }
+        .share-box h3 { font-size: 16px; margin-top: 0; color: #555; }
+        .share-buttons button { margin: 5px; padding: 10px 15px; background-color: #607d8b; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        .share-buttons button:hover { background-color: #455a64; }
+        #share-area { margin-top: 15px; display: none; padding: 0 20px; }
+        #share-text { width: 100%; padding: 10px; font-size: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; resize: vertical; }
+        #share-action-btn { margin-top: 10px; padding: 10px 20px; background-color: #ff9800; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+
+        /* クイズ画面 */
+        .quiz-view-header { max-width: 660px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center; }
+        .back-btn { padding: 10px 15px; font-size: 14px; background-color: #555; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        .back-btn:hover { background-color: #333; }
+        
+        .quiz-wrapper { display: flex; justify-content: center; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+        .container { background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 320px; box-sizing: border-box; }
+        
+        /* クイズ部分 */
+        .quiz-container { text-align: center; }
+        .quiz-status { font-size: 14px; color: #888; margin-bottom: 10px; }
+        .quiz-container h1 { font-size: 18px; margin-bottom: 20px; min-height: 2em; }
+        .quiz-container .choices { display: flex; flex-direction: column; gap: 12px; }
+        .quiz-container button.choice-btn { padding: 12px; font-size: 16px; cursor: pointer; border: 2px solid #e0e0e0; border-radius: 6px; background-color: #ffffff; transition: 0.2s; }
+        .quiz-container button.choice-btn:hover:not(:disabled) { background-color: #e0f7fa; border-color: #00bcd4; }
+        .quiz-container button.choice-btn:disabled { cursor: not-allowed; opacity: 0.7; }
+        #user-text-answer { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #e0e0e0; border-radius: 6px; text-align: center; box-sizing: border-box; }
+        #result { margin-top: 20px; font-weight: bold; font-size: 20px; min-height: 24px; }
+        .correct { color: #28a745; }
+        .incorrect { color: #dc3545; }
+        #next-button { margin-top: 15px; width: 100%; padding: 12px; font-size: 16px; background-color: #ff9800; color: white; border: none; border-radius: 6px; cursor: pointer; display: none; font-weight: bold; }
+        
+        .result-score { font-size: 24px; font-weight: bold; margin: 20px 0; color: #333; }
+        .result-score span { color: #e91e63; font-size: 36px; }
+        .result-rate { font-size: 18px; color: #555; font-weight: bold; }
+
+        /* フォーム部分 */
+        .edit-button, .delete-button, .reset-button { margin-top: 10px; width: 100%; padding: 10px; font-size: 14px; border: none; border-radius: 6px; cursor: pointer; color: white; }
+        .edit-button { background-color: #4CAF50; }
+        .delete-button { background-color: #f44336; }
+        .reset-button { background-color: #999; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-size: 14px; color: #666; margin-bottom: 5px; }
+        .form-group input[type="text"] { width: 100%; padding: 10px; font-size: 14px; border: 1px solid #e0e0e0; border-radius: 6px; box-sizing: border-box; }
+        .choice-group { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .radio-inline { display: flex; gap: 15px; margin-bottom: 10px; }
+        .add-button { width: 100%; padding: 12px; font-size: 16px; cursor: pointer; border: none; border-radius: 6px; background-color: #00bcd4; color: white; margin-top: 10px; }
+        .add-button.edit-mode { background-color: #4CAF50; }
+        .choice-controls button { padding: 6px 12px; font-size: 12px; border: 1px solid #ccc; background: #f9f9f9; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <!-- ホーム画面 -->
+    <div id="home-view" class="view active">
+        <h2>📚 クイズ集一覧</h2>
+        <ul id="quiz-set-list" class="set-list"></ul>
+        <div class="create-set-box">
+            <input type="text" id="new-set-title" placeholder="新しいクイズ集の名前">
+            <button onclick="createNewSet()">＋ 作成</button>
+        </div>
+
+        <!-- ★追加：共有機能エリア -->
+        <div class="share-box">
+            <h3>🤝 友達とクイズを共有する</h3>
+            <div class="share-buttons">
+                <button onclick="showExport()">📤 データを書き出す（送る用）</button>
+                <button onclick="showImport()">📥 データを読み込む（もらう用）</button>
+            </div>
+            
+            <div id="share-area">
+                <p id="share-message" style="font-size: 14px; color: #555;"></p>
+                <textarea id="share-text" rows="5"></textarea>
+                <button id="share-action-btn"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- クイズ画面（変更なし） -->
+    <div id="quiz-view" class="view">
+        <div class="quiz-view-header">
+            <button class="back-btn" onclick="goHome()">← ホームに戻る</button>
+            <h2 id="current-set-title">クイズタイトル</h2>
+        </div>
+        <div class="quiz-wrapper">
+            <!-- 左：プレイエリア -->
+            <div class="container quiz-container">
+                <div id="quiz-status" class="quiz-status"></div>
+                <h1 id="quiz-title"></h1>
+                <div class="choices" id="quiz-choices"></div>
+                <div id="result"></div>
+                <button id="next-button" onclick="handleNextAction()">次の問題へ ＞</button>
+                <div id="edit-controls">
+                    <button class="edit-button" onclick="startEdit()">📝 この問題を編集する</button>
+                    <button class="delete-button" onclick="deleteQuiz()">🗑️ この問題を削除する</button>
+                </div>
+            </div>
+            <!-- 右：作成・編集エリア -->
+            <div class="container create-container">
+                <h2 id="form-title">新しいクイズを作る</h2>
+                <div class="form-group">
+                    <label>問題の種類</label>
+                    <div class="radio-inline">
+                        <label><input type="radio" name="quiz-type" value="choice" checked onchange="toggleForm()">選択肢</label>
+                        <label><input type="radio" name="quiz-type" value="text" onchange="toggleForm()">記述式</label>
+                    </div>
+                </div>
+                <div class="form-group"><label>問題文</label><input type="text" id="new-question"></div>
+                
+                <div id="choice-input-area">
+                    <div class="form-group"><label>選択肢と正解</label>
+                        <div id="choice-list">
+                            <div class="choice-group"><input type="radio" name="correct-choice" value="0" checked><input type="text" class="choice-input-text"></div>
+                            <div class="choice-group"><input type="radio" name="correct-choice" value="1"><input type="text" class="choice-input-text"></div>
+                        </div>
+                        <div class="choice-controls" style="margin-top: 5px;">
+                            <button onclick="addChoiceField()">＋ 増やす</button>
+                            <button onclick="removeChoiceField()">－ 減らす</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="text-input-area" style="display: none;">
+                    <div class="form-group">
+                        <label>正解 (複数ある場合はカンマ区切り)</label>
+                        <input type="text" id="text-correct-answer">
+                    </div>
+                </div>
+                <button id="submit-button" class="add-button" onclick="submitQuiz()">リストに追加する</button>
+                <button id="cancel-edit-button" class="reset-button" style="display: none; margin-top: 10px;" onclick="cancelEdit()">編集をキャンセル</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. データ管理 ---
+        let quizSets = [];
+        let currentSetIndex = -1;
+        let currentIndex = 0;
+        let isEditMode = false;
+        let editTargetIndex = -1;
+        let correctCount = 0;
+        let isAnswered = false; 
+
+        const savedSets = localStorage.getItem('myQuizSets');
+        if (savedSets) {
+            quizSets = JSON.parse(savedSets);
+        } else {
+            quizSets = [{ title: "日本の地理クイズ", quizzes: [{ type: "choice", question: "日本で一番高い山はどれ？", choices: ["北岳", "富士山", "奥穂高岳"], correctAnswer: "富士山" }] }];
+            saveData();
+        }
+        function saveData() { localStorage.setItem('myQuizSets', JSON.stringify(quizSets)); }
+
+        // --- 2. ホーム画面と共有機能 ---
+        function renderHome() {
+            const listElement = document.getElementById('quiz-set-list');
+            listElement.innerHTML = ''; 
+            quizSets.forEach((quizSet, index) => {
+                const li = document.createElement('li');
+                li.className = 'set-item';
+                const playBtn = document.createElement('button');
+                playBtn.className = 'play-btn';
+                playBtn.textContent = `${quizSet.title} (全${quizSet.quizzes.length}問)`;
+                playBtn.onclick = () => openQuizSet(index);
+                const delBtn = document.createElement('button');
+                delBtn.className = 'del-set-btn';
+                delBtn.textContent = '削除';
+                delBtn.onclick = () => deleteQuizSet(index);
+                li.appendChild(playBtn); li.appendChild(delBtn); listElement.appendChild(li);
+            });
+            // 共有エリアを閉じておく
+            document.getElementById('share-area').style.display = 'none';
+        }
+
+        function createNewSet() {
+            const titleInput = document.getElementById('new-set-title');
+            if (titleInput.value.trim() === "") { alert("クイズ集の名前を入力してください。"); return; }
+            quizSets.push({ title: titleInput.value.trim(), quizzes: [{ type: "choice", question: "最初の問題！", choices: ["A", "B"], correctAnswer: "A" }] });
+            saveData(); titleInput.value = ''; renderHome();
+        }
+
+        function deleteQuizSet(index) {
+            if (confirm(`「${quizSets[index].title}」を本当に削除しますか？`)) {
+                quizSets.splice(index, 1); saveData(); renderHome();
+            }
+        }
+
+        // ★追加：エクスポート（書き出し）機能
+        function showExport() {
+            const area = document.getElementById('share-area');
+            const text = document.getElementById('share-text');
+            const btn = document.getElementById('share-action-btn');
+            area.style.display = 'block';
+            document.getElementById('share-message').textContent = '下の文字をすべてコピーして、友達にLINE等で送ってください。';
+            
+            // データを文字に変換してテキストボックスに入れる
+            text.value = JSON.stringify(quizSets);
+            text.readOnly = true; 
+            
+            btn.textContent = '📋 文字をコピーする';
+            btn.onclick = () => {
+                text.select();
+                document.execCommand('copy');
+                alert("データをコピーしました！");
+            };
+        }
+
+        // ★追加：インポート（読み込み）機能
+        function showImport() {
+            const area = document.getElementById('share-area');
+            const text = document.getElementById('share-text');
+            const btn = document.getElementById('share-action-btn');
+            area.style.display = 'block';
+            document.getElementById('share-message').textContent = '友達からもらった文字を下の枠に貼り付けてください。';
+            
+            text.value = '';
+            text.readOnly = false;
+            
+            btn.textContent = '📥 データを取り込む';
+            btn.onclick = () => {
+                try {
+                    const importedData = JSON.parse(text.value);
+                    if (Array.isArray(importedData)) {
+                        // 今のデータに、もらったデータを合体させる
+                        quizSets = quizSets.concat(importedData);
+                        saveData();
+                        renderHome();
+                        alert("友達のクイズを取り込みました！");
+                    } else {
+                        alert("データが正しくありません。");
+                    }
+                } catch (e) {
+                    alert("エラー：文字が欠けているか、間違っています。");
+                }
+            };
+        }
+
+        // --- 3. 画面の切り替え ---
+        function openQuizSet(index) {
+            currentSetIndex = index; currentIndex = 0; correctCount = 0; cancelEdit(); 
+            document.getElementById('home-view').classList.remove('active');
+            document.getElementById('quiz-view').classList.add('active');
+            document.getElementById('current-set-title').textContent = quizSets[currentSetIndex].title;
+            displayQuiz();
+        }
+        function goHome() {
+            currentSetIndex = -1;
+            document.getElementById('quiz-view').classList.remove('active');
+            document.getElementById('home-view').classList.add('active');
+            renderHome();
+        }
+
+        // --- 4. クイズの表示と判定 ---
+        function displayQuiz() {
+            isAnswered = false; 
+            document.getElementById('edit-controls').style.display = 'block'; 
+            const currentList = quizSets[currentSetIndex].quizzes;
+            const currentQuiz = currentList[currentIndex];
+            const type = currentQuiz.type || "choice"; 
+
+            document.getElementById('quiz-status').textContent = `問題 ${currentIndex + 1} / 全${currentList.length}問`;
+            document.getElementById('quiz-title').textContent = "Q. " + currentQuiz.question;
+            const choicesDiv = document.getElementById('quiz-choices');
+            
+            if (type === 'choice') {
+                choicesDiv.innerHTML = ''; 
+                currentQuiz.choices.forEach(choice => {
+                    choicesDiv.innerHTML += `<button class="choice-btn" onclick="checkAnswer('${choice}')">${choice}</button>`;
+                });
+            } else {
+                choicesDiv.innerHTML = `<input type="text" id="user-text-answer" placeholder="答えを入力してください"><button class="choice-btn" style="background-color: #00bcd4; color: white;" onclick="checkTextAnswer()">解答する</button>`;
+            }
+            document.getElementById('result').textContent = ' '; 
+            document.getElementById('result').className = '';
+            document.getElementById('next-button').style.display = 'none';
+        }
+
+        function checkTextAnswer() {
+            const userAnswer = document.getElementById('user-text-answer').value;
+            if (userAnswer !== "") checkAnswer(userAnswer);
+        }
+
+        function checkAnswer(userAnswer) {
+            if (isAnswered) return; 
+            isAnswered = true;      
+            const currentQuiz = quizSets[currentSetIndex].quizzes[currentIndex];
+            const resultArea = document.getElementById('result');
+            const cleanUserAnswer = userAnswer.trim();
+            let isCorrect = Array.isArray(currentQuiz.correctAnswer) ? currentQuiz.correctAnswer.includes(cleanUserAnswer) : (cleanUserAnswer === currentQuiz.correctAnswer);
+            
+            if (isCorrect) {
+                correctCount++;
+                resultArea.textContent = '正解！🎉'; resultArea.className = 'correct';
+            } else {
+                const ansStr = Array.isArray(currentQuiz.correctAnswer) ? currentQuiz.correctAnswer[0] : currentQuiz.correctAnswer;
+                resultArea.textContent = '不正解！💦 (正解: ' + ansStr + ')'; resultArea.className = 'incorrect';
+            }
+            document.querySelectorAll('.choice-btn').forEach(btn => btn.disabled = true);
+            const nextBtn = document.getElementById('next-button');
+            nextBtn.textContent = (currentIndex < quizSets[currentSetIndex].quizzes.length - 1) ? "次の問題へ ＞" : "結果を見る 🏆";
+            nextBtn.style.display = 'block';
+        }
+
+        function handleNextAction() {
+            if (currentIndex < quizSets[currentSetIndex].quizzes.length - 1) {
+                currentIndex++; displayQuiz();
+            } else { showResult(); }
+        }
+
+        function showResult() {
+            const total = quizSets[currentSetIndex].quizzes.length;
+            document.getElementById('quiz-status').textContent = "クイズ終了！";
+            document.getElementById('quiz-title').textContent = "🎉 結果発表 🎉";
+            document.getElementById('result').textContent = "";
+            document.getElementById('edit-controls').style.display = 'none'; 
+            document.getElementById('quiz-choices').innerHTML = `<div class="result-score">${total}問中 <span>${correctCount}</span> 問正解！</div><div class="result-rate">正答率: ${Math.round((correctCount / total) * 100)}%</div>`;
+            const nextBtn = document.getElementById('next-button');
+            nextBtn.textContent = "🔄 もう一度遊ぶ";
+            nextBtn.onclick = () => { currentIndex = 0; correctCount = 0; document.getElementById('next-button').onclick = handleNextAction; displayQuiz(); };
+        }
+
+        // --- 5. 編集・追加機能 ---
+        function toggleForm() {
+            const type = document.querySelector('input[name="quiz-type"]:checked').value;
+            document.getElementById('choice-input-area').style.display = (type === 'choice') ? 'block' : 'none';
+            document.getElementById('text-input-area').style.display = (type === 'text') ? 'block' : 'none';
+        }
+        function addChoiceField() {
+            const list = document.getElementById('choice-list');
+            const div = document.createElement('div'); div.className = 'choice-group';
+            div.innerHTML = `<input type="radio" name="correct-choice" value="${list.children.length}"><input type="text" class="choice-input-text">`;
+            list.appendChild(div);
+        }
+        function removeChoiceField() {
+            const list = document.getElementById('choice-list');
+            if (list.children.length > 2) list.removeChild(list.lastElementChild);
+        }
+        function startEdit() {
+            isEditMode = true; editTargetIndex = currentIndex;
+            const targetQuiz = quizSets[currentSetIndex].quizzes[currentIndex];
+            document.getElementById('form-title').textContent = "📝 クイズを編集する";
+            document.getElementById('submit-button').textContent = "変更を保存する";
+            document.getElementById('submit-button').classList.add('edit-mode');
+            document.getElementById('cancel-edit-button').style.display = 'inline-block';
+            document.getElementById('new-question').value = targetQuiz.question;
+            if (targetQuiz.type === 'text') {
+                document.querySelector('input[name="quiz-type"][value="text"]').checked = true; toggleForm();
+                document.getElementById('text-correct-answer').value = targetQuiz.correctAnswer.join(', ');
+            } else {
+                document.querySelector('input[name="quiz-type"][value="choice"]').checked = true; toggleForm();
+                const list = document.getElementById('choice-list'); list.innerHTML = '';
+                targetQuiz.choices.forEach((c, idx) => {
+                    const div = document.createElement('div'); div.className = 'choice-group';
+                    div.innerHTML = `<input type="radio" name="correct-choice" value="${idx}" ${(c === targetQuiz.correctAnswer) ? 'checked' : ''}><input type="text" class="choice-input-text" value="${c}">`;
+                    list.appendChild(div);
+                });
+            }
+        }
+        function cancelEdit() {
+            isEditMode = false; editTargetIndex = -1;
+            document.getElementById('form-title').textContent = "新しいクイズを作る";
+            document.getElementById('submit-button').textContent = "リストに追加する";
+            document.getElementById('submit-button').classList.remove('edit-mode');
+            document.getElementById('cancel-edit-button').style.display = 'none';
+            document.getElementById('new-question').value = ''; document.getElementById('text-correct-answer').value = '';
+            document.querySelector('input[name="quiz-type"][value="choice"]').checked = true; toggleForm();
+            document.getElementById('choice-list').innerHTML = `<div class="choice-group"><input type="radio" name="correct-choice" value="0" checked><input type="text" class="choice-input-text"></div><div class="choice-group"><input type="radio" name="correct-choice" value="1"><input type="text" class="choice-input-text"></div>`;
+        }
+        function submitQuiz() {
+            const type = document.querySelector('input[name="quiz-type"]:checked').value;
+            const questionText = document.getElementById('new-question').value;
+            if (questionText === "") { alert("問題文を入力してください！"); return; }
+            let newQuiz;
+            if (type === 'choice') {
+                const inputs = document.querySelectorAll('.choice-input-text');
+                const radios = document.getElementsByName('correct-choice');
+                let choicesArray = [], correctAnswerText = "", hasEmpty = false;
+                inputs.forEach((input, index) => {
+                    if (input.value === "") hasEmpty = true;
+                    choicesArray.push(input.value);
+                    if (radios[index].checked) correctAnswerText = input.value;
+                });
+                if (hasEmpty) { alert("すべての選択肢を入力してください！"); return; }
+                newQuiz = { type: "choice", question: questionText, choices: choicesArray, correctAnswer: correctAnswerText };
+            } else {
+                const textCorrect = document.getElementById('text-correct-answer').value;
+                if (textCorrect === "") { alert("正解の単語を入力してください！"); return; }
+                newQuiz = { type: "text", question: questionText, correctAnswer: textCorrect.split(',').map(item => item.trim()) };
+            }
+            if (isEditMode) { quizSets[currentSetIndex].quizzes[editTargetIndex] = newQuiz; alert("変更を保存しました！"); } 
+            else { quizSets[currentSetIndex].quizzes.push(newQuiz); alert("新しい問題を追加しました！"); }
+            saveData(); cancelEdit(); displayQuiz();
+        }
+        function deleteQuiz() {
+            if (quizSets[currentSetIndex].quizzes.length === 1) { alert("最後の1問は削除できません！"); return; }
+            if (confirm("本当にこの問題を削除しますか？")) {
+                quizSets[currentSetIndex].quizzes.splice(currentIndex, 1);
+                saveData();
+                if (currentIndex >= quizSets[currentSetIndex].quizzes.length) currentIndex = quizSets[currentSetIndex].quizzes.length - 1;
+                alert("問題を削除しました。"); displayQuiz();
+            }
+        }
+
+        renderHome();
+    </script>
+</body>
+</html>
