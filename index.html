@@ -2,7 +2,10 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>クイズアプリ</title>
+    <title>リアルタイム同期クイズアプリ</title>
+    <!-- Firebase SDK (Compat版) の読み込み -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <style>
         body { font-family: sans-serif; background-color: #f0f8ff; margin: 0; padding: 20px; color: #333; }
         
@@ -12,6 +15,7 @@
 
         /* ホーム画面 */
         #home-view { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .status-badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; background-color: #4caf50; color: white; margin-bottom: 15px; }
         .set-list { list-style: none; padding: 0; }
         .set-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #eee; }
         .set-item button.play-btn { font-size: 18px; padding: 10px 20px; background-color: #00bcd4; color: white; border: none; border-radius: 6px; cursor: pointer; flex-grow: 1; text-align: left; margin-right: 10px; transition: 0.2s; }
@@ -22,15 +26,6 @@
         .create-set-box input { flex-grow: 1; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
         .create-set-box button { padding: 10px 20px; font-size: 16px; background-color: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; }
 
-        /* 共有機能エリアのスタイル */
-        .share-box { margin-top: 40px; padding-top: 20px; border-top: 2px solid #eee; text-align: center; background-color: #fafafa; border-radius: 8px; padding-bottom: 20px; }
-        .share-box h3 { font-size: 16px; margin-top: 0; color: #555; }
-        .share-buttons button { margin: 5px; padding: 10px 15px; background-color: #607d8b; color: white; border: none; border-radius: 6px; cursor: pointer; }
-        .share-buttons button:hover { background-color: #455a64; }
-        #share-area { margin-top: 15px; display: none; padding: 0 20px; }
-        #share-text { width: 100%; padding: 10px; font-size: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; resize: vertical; }
-        #share-action-btn { margin-top: 10px; padding: 10px 20px; background-color: #ff9800; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-
         /* クイズ画面 */
         .quiz-view-header { max-width: 660px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center; }
         .back-btn { padding: 10px 15px; font-size: 14px; background-color: #555; color: white; border: none; border-radius: 6px; cursor: pointer; }
@@ -39,7 +34,6 @@
         .quiz-wrapper { display: flex; justify-content: center; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
         .container { background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 320px; box-sizing: border-box; }
         
-        /* クイズ部分 */
         .quiz-container { text-align: center; }
         .quiz-status { font-size: 14px; color: #888; margin-bottom: 10px; }
         .quiz-container h1 { font-size: 18px; margin-bottom: 20px; min-height: 2em; }
@@ -57,7 +51,6 @@
         .result-score span { color: #e91e63; font-size: 36px; }
         .result-rate { font-size: 18px; color: #555; font-weight: bold; }
 
-        /* フォーム部分 */
         .edit-button, .delete-button, .reset-button { margin-top: 10px; width: 100%; padding: 10px; font-size: 14px; border: none; border-radius: 6px; cursor: pointer; color: white; }
         .edit-button { background-color: #4CAF50; }
         .delete-button { background-color: #f44336; }
@@ -76,26 +69,12 @@
 
     <!-- ホーム画面 -->
     <div id="home-view" class="view active">
+        <span class="status-badge">⚡ Firebase リアルタイム同期中</span>
         <h2>📚 クイズ集一覧</h2>
         <ul id="quiz-set-list" class="set-list"></ul>
         <div class="create-set-box">
             <input type="text" id="new-set-title" placeholder="新しいクイズ集の名前">
             <button onclick="createNewSet()">＋ 作成</button>
-        </div>
-
-        <!-- 共有機能エリア -->
-        <div class="share-box">
-            <h3>🤝 友達とクイズを共有する</h3>
-            <div class="share-buttons">
-                <button onclick="showExport()">📤 データを書き出す（送る用）</button>
-                <button onclick="showImport()">📥 データを読み込む（もらう用）</button>
-            </div>
-            
-            <div id="share-area">
-                <p id="share-message" style="font-size: 14px; color: #555;"></p>
-                <textarea id="share-text" rows="5"></textarea>
-                <button id="share-action-btn"></button>
-            </div>
         </div>
     </div>
 
@@ -106,7 +85,6 @@
             <h2 id="current-set-title">クイズタイトル</h2>
         </div>
         <div class="quiz-wrapper">
-            <!-- 左：プレイエリア -->
             <div class="container quiz-container">
                 <div id="quiz-status" class="quiz-status"></div>
                 <h1 id="quiz-title"></h1>
@@ -118,7 +96,7 @@
                     <button class="delete-button" onclick="deleteQuiz()">🗑️ この問題を削除する</button>
                 </div>
             </div>
-            <!-- 右：作成・編集エリア -->
+            
             <div class="container create-container">
                 <h2 id="form-title">新しいクイズを作る</h2>
                 <div class="form-group">
@@ -155,25 +133,46 @@
     </div>
 
     <script>
-        // --- データ管理 ---
+        // --- Firebase 初期化 ---
+        /* ⚠️ ここをご自身のFirebase設定に置き換えてください */
+        const firebaseConfig = {
+  apiKey: "AIzaSyDWBeeMvqY-thtzyYlK4MoKemcJHYZG4cc",
+  authDomain: "quiz-app-ver1.firebaseapp.com",
+  projectId: "quiz-app-ver1",
+  storageBucket: "quiz-app-ver1.firebasestorage.app",
+  messagingSenderId: "266883152076",
+  appId: "1:266883152076:web:8cd9d12c594564b056ea69"
+};
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // --- データ管理変数 ---
         let quizSets = [];
         let currentSetIndex = -1;
         let currentIndex = 0;
         let isEditMode = false;
         let editTargetIndex = -1;
         let correctCount = 0;
-        let isAnswered = false; 
+        let isAnswered = false;
 
-        const savedSets = localStorage.getItem('myQuizSets');
-        if (savedSets) {
-            quizSets = JSON.parse(savedSets);
-        } else {
-            quizSets = [{ title: "日本の地理クイズ", quizzes: [{ type: "choice", question: "日本で一番高い山はどれ？", choices: ["北岳", "富士山", "奥穂高岳"], correctAnswer: "富士山" }] }];
-            saveData();
-        }
-        function saveData() { localStorage.setItem('myQuizSets', JSON.stringify(quizSets)); }
+        // --- Firebase リアルタイム監視 (onSnapshot) ---
+        db.collection("quizSets").orderBy("createdAt", "asc").onSnapshot((snapshot) => {
+            quizSets = [];
+            snapshot.forEach((doc) => {
+                quizSets.push({ id: doc.id, ...doc.data() });
+            });
+            renderHome();
+            
+            // 現在クイズ画面を開いている場合は、最新のデータで再描画
+            if (currentSetIndex !== -1 && quizSets[currentSetIndex]) {
+                if (currentIndex >= quizSets[currentSetIndex].quizzes.length) {
+                    currentIndex = Math.max(0, quizSets[currentSetIndex].quizzes.length - 1);
+                }
+                displayQuiz();
+            }
+        });
 
-        // --- ホーム画面と共有機能 ---
+        // --- ホーム画面描画 ---
         function renderHome() {
             const listElement = document.getElementById('quiz-set-list');
             listElement.innerHTML = ''; 
@@ -187,72 +186,32 @@
                 const delBtn = document.createElement('button');
                 delBtn.className = 'del-set-btn';
                 delBtn.textContent = '削除';
-                delBtn.onclick = () => deleteQuizSet(index);
+                delBtn.onclick = () => deleteQuizSet(quizSet.id, quizSet.title);
                 li.appendChild(playBtn); li.appendChild(delBtn); listElement.appendChild(li);
             });
-            document.getElementById('share-area').style.display = 'none';
         }
 
-        function createNewSet() {
+        // --- クイズ集の操作 (クラウド同期) ---
+        async function createNewSet() {
             const titleInput = document.getElementById('new-set-title');
-            if (titleInput.value.trim() === "") { alert("クイズ集の名前を入力してください。"); return; }
-            quizSets.push({ title: titleInput.value.trim(), quizzes: [{ type: "choice", question: "最初の問題！", choices: ["A", "B"], correctAnswer: "A" }] });
-            saveData(); titleInput.value = ''; renderHome();
+            const title = titleInput.value.trim();
+            if (title === "") { alert("クイズ集の名前を入力してください。"); return; }
+            
+            await db.collection("quizSets").add({
+                title: title,
+                quizzes: [{ type: "choice", question: "最初の問題！", choices: ["A", "B"], correctAnswer: "A" }],
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            titleInput.value = '';
         }
 
-        function deleteQuizSet(index) {
-            if (confirm(`「${quizSets[index].title}」を本当に削除しますか？`)) {
-                quizSets.splice(index, 1); saveData(); renderHome();
+        async function deleteQuizSet(docId, title) {
+            if (confirm(`「${title}」を本当に削除しますか？`)) {
+                await db.collection("quizSets").doc(docId).delete();
             }
         }
 
-        function showExport() {
-            const area = document.getElementById('share-area');
-            const text = document.getElementById('share-text');
-            const btn = document.getElementById('share-action-btn');
-            area.style.display = 'block';
-            document.getElementById('share-message').textContent = '下の文字をすべてコピーして、友達にLINE等で送ってください。';
-            
-            text.value = JSON.stringify(quizSets);
-            text.readOnly = true; 
-            
-            btn.textContent = '📋 文字をコピーする';
-            btn.onclick = () => {
-                text.select();
-                document.execCommand('copy');
-                alert("データをコピーしました！");
-            };
-        }
-
-        function showImport() {
-            const area = document.getElementById('share-area');
-            const text = document.getElementById('share-text');
-            const btn = document.getElementById('share-action-btn');
-            area.style.display = 'block';
-            document.getElementById('share-message').textContent = '友達からもらった文字を下の枠に貼り付けてください。';
-            
-            text.value = '';
-            text.readOnly = false;
-            
-            btn.textContent = '📥 データを取り込む';
-            btn.onclick = () => {
-                try {
-                    const importedData = JSON.parse(text.value);
-                    if (Array.isArray(importedData)) {
-                        quizSets = quizSets.concat(importedData);
-                        saveData();
-                        renderHome();
-                        alert("友達のクイズを取り込みました！");
-                    } else {
-                        alert("データが正しくありません。");
-                    }
-                } catch (e) {
-                    alert("エラー：文字が欠けているか、間違っています。");
-                }
-            };
-        }
-
-        // --- 画面の切り替え ---
+        // --- 画面切り替え ---
         function openQuizSet(index) {
             currentSetIndex = index; currentIndex = 0; correctCount = 0; cancelEdit(); 
             document.getElementById('home-view').classList.remove('active');
@@ -260,18 +219,24 @@
             document.getElementById('current-set-title').textContent = quizSets[currentSetIndex].title;
             displayQuiz();
         }
+
         function goHome() {
             currentSetIndex = -1;
             document.getElementById('quiz-view').classList.remove('active');
             document.getElementById('home-view').classList.add('active');
-            renderHome();
         }
 
-        // --- クイズの表示と判定 ---
+        // --- クイズの表示・判定 ---
         function displayQuiz() {
             isAnswered = false; 
             document.getElementById('edit-controls').style.display = 'block'; 
             const currentList = quizSets[currentSetIndex].quizzes;
+            
+            if (!currentList || currentList.length === 0) {
+                goHome();
+                return;
+            }
+
             const currentQuiz = currentList[currentIndex];
             const type = currentQuiz.type || "choice"; 
 
@@ -324,7 +289,6 @@
             } else { showResult(); }
         }
 
-        // ★変更点：結果画面の表示
         function showResult() {
             const total = quizSets[currentSetIndex].quizzes.length;
             document.getElementById('quiz-status').textContent = "クイズ終了！";
@@ -332,31 +296,22 @@
             document.getElementById('result').textContent = "";
             document.getElementById('edit-controls').style.display = 'none'; 
             
-            // スコア表示
             let html = `<div class="result-score">${total}問中 <span>${correctCount}</span> 問正解！</div>`;
             html += `<div class="result-rate">正答率: ${Math.round((correctCount / total) * 100)}%</div>`;
-            
-            // アクションボタン（もう一度遊ぶ ＆ ホームに戻る）
             html += `<div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
                         <button onclick="restartQuiz()" style="padding: 12px; font-size: 16px; background-color: #ff9800; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">🔄 もう一度遊ぶ</button>
                         <button onclick="goHome()" style="padding: 12px; font-size: 16px; background-color: #607d8b; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">🏠 ホームに戻る</button>
                      </div>`;
             
             document.getElementById('quiz-choices').innerHTML = html;
-            
-            // 従来の「次の問題へ」ボタンは隠しておく
             document.getElementById('next-button').style.display = 'none';
         }
 
-        // ★追加：「もう一度遊ぶ」用の新しい関数
         function restartQuiz() {
-            currentIndex = 0; 
-            correctCount = 0; 
-            document.getElementById('next-button').onclick = handleNextAction; 
-            displayQuiz(); 
+            currentIndex = 0; correctCount = 0; displayQuiz(); 
         }
 
-        // --- 編集・追加機能 ---
+        // --- フォーム・編集操作 ---
         function toggleForm() {
             const type = document.querySelector('input[name="quiz-type"]:checked').value;
             document.getElementById('choice-input-area').style.display = (type === 'choice') ? 'block' : 'none';
@@ -382,7 +337,7 @@
             document.getElementById('new-question').value = targetQuiz.question;
             if (targetQuiz.type === 'text') {
                 document.querySelector('input[name="quiz-type"][value="text"]').checked = true; toggleForm();
-                document.getElementById('text-correct-answer').value = targetQuiz.correctAnswer.join(', ');
+                document.getElementById('text-correct-answer').value = Array.isArray(targetQuiz.correctAnswer) ? targetQuiz.correctAnswer.join(', ') : targetQuiz.correctAnswer;
             } else {
                 document.querySelector('input[name="quiz-type"][value="choice"]').checked = true; toggleForm();
                 const list = document.getElementById('choice-list'); list.innerHTML = '';
@@ -403,7 +358,8 @@
             document.querySelector('input[name="quiz-type"][value="choice"]').checked = true; toggleForm();
             document.getElementById('choice-list').innerHTML = `<div class="choice-group"><input type="radio" name="correct-choice" value="0" checked><input type="text" class="choice-input-text"></div><div class="choice-group"><input type="radio" name="correct-choice" value="1"><input type="text" class="choice-input-text"></div>`;
         }
-        function submitQuiz() {
+
+        async function submitQuiz() {
             const type = document.querySelector('input[name="quiz-type"]:checked').value;
             const questionText = document.getElementById('new-question').value;
             if (questionText === "") { alert("問題文を入力してください！"); return; }
@@ -424,21 +380,32 @@
                 if (textCorrect === "") { alert("正解の単語を入力してください！"); return; }
                 newQuiz = { type: "text", question: questionText, correctAnswer: textCorrect.split(',').map(item => item.trim()) };
             }
-            if (isEditMode) { quizSets[currentSetIndex].quizzes[editTargetIndex] = newQuiz; alert("変更を保存しました！"); } 
-            else { quizSets[currentSetIndex].quizzes.push(newQuiz); alert("新しい問題を追加しました！"); }
-            saveData(); cancelEdit(); displayQuiz();
-        }
-        function deleteQuiz() {
-            if (quizSets[currentSetIndex].quizzes.length === 1) { alert("最後の1問は削除できません！"); return; }
-            if (confirm("本当にこの問題を削除しますか？")) {
-                quizSets[currentSetIndex].quizzes.splice(currentIndex, 1);
-                saveData();
-                if (currentIndex >= quizSets[currentSetIndex].quizzes.length) currentIndex = quizSets[currentSetIndex].quizzes.length - 1;
-                alert("問題を削除しました。"); displayQuiz();
+
+            const currentQuizzes = [...quizSets[currentSetIndex].quizzes];
+            if (isEditMode) {
+                currentQuizzes[editTargetIndex] = newQuiz;
+            } else {
+                currentQuizzes.push(newQuiz);
             }
+
+            // Cloud Firestore のデータを更新
+            await db.collection("quizSets").doc(quizSets[currentSetIndex].id).update({
+                quizzes: currentQuizzes
+            });
+
+            cancelEdit();
         }
 
-        renderHome();
+        async function deleteQuiz() {
+            const currentQuizzes = [...quizSets[currentSetIndex].quizzes];
+            if (currentQuizzes.length === 1) { alert("最後の1問は削除できません！"); return; }
+            if (confirm("本当にこの問題を削除しますか？")) {
+                currentQuizzes.splice(currentIndex, 1);
+                await db.collection("quizSets").doc(quizSets[currentSetIndex].id).update({
+                    quizzes: currentQuizzes
+                });
+            }
+        }
     </script>
 </body>
 </html>
