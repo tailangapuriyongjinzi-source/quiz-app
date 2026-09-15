@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>ログイン機能付きクイズアプリ</title>
+    <title>作成者限定編集機能付きクイズアプリ</title>
     <!-- Firebase SDK (App, Firestore, Auth) の読み込み -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -106,13 +106,13 @@
                 <div class="choices" id="quiz-choices"></div>
                 <div id="result"></div>
                 <button id="next-button" onclick="handleNextAction()">次の問題へ ＞</button>
-                <div id="edit-controls">
+                <div id="edit-controls" style="display: none;">
                     <button class="edit-button" onclick="startEdit()">📝 この問題を編集する</button>
                     <button class="delete-button" onclick="deleteQuiz()">🗑️ この問題を削除する</button>
                 </div>
             </div>
             
-            <div class="container create-container">
+            <div id="create-container" class="container create-container" style="display: none;">
                 <h2 id="form-title">新しいクイズを作る</h2>
                 <div class="form-group">
                     <label>問題の種類</label>
@@ -162,7 +162,7 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
 
-        // --- ログイン状態の監視 ---
+        // --- ログイン状態監視 ---
         let currentUser = null;
 
         auth.onAuthStateChanged((user) => {
@@ -179,21 +179,20 @@
                 authBtnEl.textContent = "Googleでログイン";
                 authBtnEl.className = "auth-btn login-btn";
             }
+            renderHome();
+            if (currentSetIndex !== -1) displayQuiz();
         });
 
-        // ログイン・ログアウトの切替
         function toggleAuth() {
             if (currentUser) {
                 auth.signOut();
             } else {
                 const provider = new firebase.auth.GoogleAuthProvider();
-                auth.signInWithPopup(provider).catch((error) => {
-                    alert("ログインエラー: " + error.message);
-                });
+                auth.signInWithPopup(provider).catch((error) => alert("ログインエラー: " + error.message));
             }
         }
 
-        // --- データ管理変数 ---
+        // --- データ管理 ---
         let quizSets = [];
         let currentSetIndex = -1;
         let currentIndex = 0;
@@ -202,7 +201,11 @@
         let correctCount = 0;
         let isAnswered = false;
 
-        // --- Firebase リアルタイム監視 ---
+        function isCurrentOwner() {
+            return currentUser && quizSets[currentSetIndex] && (currentUser.uid === quizSets[currentSetIndex].authorId);
+        }
+
+        // --- リアルタイム監視 ---
         db.collection("quizSets").orderBy("createdAt", "asc").onSnapshot((snapshot) => {
             quizSets = [];
             snapshot.forEach((doc) => {
@@ -218,7 +221,7 @@
             }
         });
 
-        // --- ホーム画面描画（作成者名を表示） ---
+        // --- ホーム画面描画（本人の場合のみ削除ボタンを表示） ---
         function renderHome() {
             const listElement = document.getElementById('quiz-set-list');
             listElement.innerHTML = ''; 
@@ -240,25 +243,23 @@
 
                 infoDiv.appendChild(playBtn);
                 infoDiv.appendChild(authorDiv);
+                li.appendChild(infoDiv);
 
-                const delBtn = document.createElement('button');
-                delBtn.className = 'del-set-btn';
-                delBtn.textContent = '削除';
-                delBtn.onclick = () => deleteQuizSet(quizSet.id, quizSet.title);
+                // 本人のクイズ集だけ「削除」ボタンを表示
+                if (currentUser && currentUser.uid === quizSet.authorId) {
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'del-set-btn';
+                    delBtn.textContent = '削除';
+                    delBtn.onclick = () => deleteQuizSet(quizSet.id, quizSet.title, quizSet.authorId);
+                    li.appendChild(delBtn);
+                }
 
-                li.appendChild(infoDiv); 
-                li.appendChild(delBtn); 
                 listElement.appendChild(li);
             });
         }
 
-        // --- クイズ集の操作 ---
         async function createNewSet() {
-            if (!currentUser) {
-                alert("クイズ集を作成するにはログインが必要です！");
-                return;
-            }
-
+            if (!currentUser) { alert("クイズ集を作成するにはログインが必要です！"); return; }
             const titleInput = document.getElementById('new-set-title');
             const title = titleInput.value.trim();
             if (title === "") { alert("クイズ集の名前を入力してください。"); return; }
@@ -273,9 +274,9 @@
             titleInput.value = '';
         }
 
-        async function deleteQuizSet(docId, title) {
-            if (!currentUser) {
-                alert("削除するにはログインが必要です！");
+        async function deleteQuizSet(docId, title, authorId) {
+            if (!currentUser || currentUser.uid !== authorId) {
+                alert("作成者本人しか削除できません！");
                 return;
             }
             if (confirm(`「${title}」を本当に削除しますか？`)) {
@@ -283,7 +284,6 @@
             }
         }
 
-        // --- 画面切り替え ---
         function openQuizSet(index) {
             currentSetIndex = index; currentIndex = 0; correctCount = 0; cancelEdit(); 
             document.getElementById('home-view').classList.remove('active');
@@ -295,20 +295,20 @@
         function goHome() {
             currentSetIndex = -1;
             document.getElementById('quiz-view').classList.remove('active');
-            document.getElementById('home-view').classList.active;
             document.getElementById('home-view').classList.add('active');
         }
 
-        // --- クイズ表示・判定 ---
+        // --- クイズ表示（作成者のみ編集フォームを表示） ---
         function displayQuiz() {
             isAnswered = false; 
-            document.getElementById('edit-controls').style.display = 'block'; 
+            const isOwner = isCurrentOwner();
+
+            // 作成者だけに編集・作成UIを表示
+            document.getElementById('edit-controls').style.display = isOwner ? 'block' : 'none'; 
+            document.getElementById('create-container').style.display = isOwner ? 'block' : 'none';
+
             const currentList = quizSets[currentSetIndex].quizzes;
-            
-            if (!currentList || currentList.length === 0) {
-                goHome();
-                return;
-            }
+            if (!currentList || currentList.length === 0) { goHome(); return; }
 
             const currentQuiz = currentList[currentIndex];
             const type = currentQuiz.type || "choice"; 
@@ -384,7 +384,7 @@
             currentIndex = 0; correctCount = 0; displayQuiz(); 
         }
 
-        // --- 編集・作成処理 ---
+        // --- フォーム・編集操作（権限チェック付き） ---
         function toggleForm() {
             const type = document.querySelector('input[name="quiz-type"]:checked').value;
             document.getElementById('choice-input-area').style.display = (type === 'choice') ? 'block' : 'none';
@@ -401,7 +401,7 @@
             if (list.children.length > 2) list.removeChild(list.lastElementChild);
         }
         function startEdit() {
-            if (!currentUser) { alert("編集するにはログインが必要です！"); return; }
+            if (!isCurrentOwner()) { alert("作成者本人しか編集できません！"); return; }
             isEditMode = true; editTargetIndex = currentIndex;
             const targetQuiz = quizSets[currentSetIndex].quizzes[currentIndex];
             document.getElementById('form-title').textContent = "📝 クイズを編集する";
@@ -434,7 +434,7 @@
         }
 
         async function submitQuiz() {
-            if (!currentUser) { alert("問題を追加・編集するにはログインが必要です！"); return; }
+            if (!isCurrentOwner()) { alert("作成者本人しか追加・編集できません！"); return; }
             const type = document.querySelector('input[name="quiz-type"]:checked').value;
             const questionText = document.getElementById('new-question').value;
             if (questionText === "") { alert("問題文を入力してください！"); return; }
@@ -471,7 +471,7 @@
         }
 
         async function deleteQuiz() {
-            if (!currentUser) { alert("削除するにはログインが必要です！"); return; }
+            if (!isCurrentOwner()) { alert("作成者本人しか削除できません！"); return; }
             const currentQuizzes = [...quizSets[currentSetIndex].quizzes];
             if (currentQuizzes.length === 1) { alert("最後の1問は削除できません！"); return; }
             if (confirm("本当にこの問題を削除しますか？")) {
