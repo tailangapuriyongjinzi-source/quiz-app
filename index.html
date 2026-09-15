@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>作成者限定編集機能付きクイズアプリ</title>
+    <title>通報機能付きクイズアプリ</title>
     <!-- Firebase SDK (App, Firestore, Auth) の読み込み -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -43,7 +43,7 @@
         .quiz-wrapper { display: flex; justify-content: center; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
         .container { background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 320px; box-sizing: border-box; }
         
-        .quiz-container { text-align: center; }
+        .quiz-container { text-align: center; position: relative; }
         .quiz-status { font-size: 14px; color: #888; margin-bottom: 10px; }
         .quiz-container h1 { font-size: 18px; margin-bottom: 20px; min-height: 2em; }
         .quiz-container .choices { display: flex; flex-direction: column; gap: 12px; }
@@ -56,6 +56,10 @@
         .incorrect { color: #dc3545; }
         #next-button { margin-top: 15px; width: 100%; padding: 12px; font-size: 16px; background-color: #ff9800; color: white; border: none; border-radius: 6px; cursor: pointer; display: none; font-weight: bold; }
         
+        /* 通報ボタンのスタイル */
+        .report-btn { margin-top: 15px; background: none; border: none; color: #888; font-size: 12px; cursor: pointer; text-decoration: underline; }
+        .report-btn:hover { color: #e53935; }
+
         .result-score { font-size: 24px; font-weight: bold; margin: 20px 0; color: #333; }
         .result-score span { color: #e91e63; font-size: 36px; }
         .result-rate { font-size: 18px; color: #555; font-weight: bold; }
@@ -106,6 +110,10 @@
                 <div class="choices" id="quiz-choices"></div>
                 <div id="result"></div>
                 <button id="next-button" onclick="handleNextAction()">次の問題へ ＞</button>
+                
+                <!-- 通報ボタン -->
+                <button id="report-btn" class="report-btn" onclick="reportQuiz()">🚩 この問題を通報する</button>
+
                 <div id="edit-controls" style="display: none;">
                     <button class="edit-button" onclick="startEdit()">📝 この問題を編集する</button>
                     <button class="delete-button" onclick="deleteQuiz()">🗑️ この問題を削除する</button>
@@ -221,7 +229,7 @@
             }
         });
 
-        // --- ホーム画面描画（本人の場合のみ削除ボタンを表示） ---
+        // --- ホーム画面描画 ---
         function renderHome() {
             const listElement = document.getElementById('quiz-set-list');
             listElement.innerHTML = ''; 
@@ -245,7 +253,6 @@
                 infoDiv.appendChild(authorDiv);
                 li.appendChild(infoDiv);
 
-                // 本人のクイズ集だけ「削除」ボタンを表示
                 if (currentUser && currentUser.uid === quizSet.authorId) {
                     const delBtn = document.createElement('button');
                     delBtn.className = 'del-set-btn';
@@ -298,14 +305,14 @@
             document.getElementById('home-view').classList.add('active');
         }
 
-        // --- クイズ表示（作成者のみ編集フォームを表示） ---
+        // --- クイズ表示 ---
         function displayQuiz() {
             isAnswered = false; 
             const isOwner = isCurrentOwner();
 
-            // 作成者だけに編集・作成UIを表示
             document.getElementById('edit-controls').style.display = isOwner ? 'block' : 'none'; 
             document.getElementById('create-container').style.display = isOwner ? 'block' : 'none';
+            document.getElementById('report-btn').style.display = 'block';
 
             const currentList = quizSets[currentSetIndex].quizzes;
             if (!currentList || currentList.length === 0) { goHome(); return; }
@@ -368,6 +375,7 @@
             document.getElementById('quiz-title').textContent = "🎉 結果発表 🎉";
             document.getElementById('result').textContent = "";
             document.getElementById('edit-controls').style.display = 'none'; 
+            document.getElementById('report-btn').style.display = 'none';
             
             let html = `<div class="result-score">${total}問中 <span>${correctCount}</span> 問正解！</div>`;
             html += `<div class="result-rate">正答率: ${Math.round((correctCount / total) * 100)}%</div>`;
@@ -384,7 +392,31 @@
             currentIndex = 0; correctCount = 0; displayQuiz(); 
         }
 
-        // --- フォーム・編集操作（権限チェック付き） ---
+        // --- 通報機能 ---
+        async function reportQuiz() {
+            const currentQuiz = quizSets[currentSetIndex].quizzes[currentIndex];
+            const reason = prompt("この問題を通報する理由を入力してください（不適切な表現、誤りなど）:");
+            
+            if (reason === null) return; // キャンセルされた場合は中断
+
+            try {
+                await db.collection("reports").add({
+                    quizSetId: quizSets[currentSetIndex].id,
+                    quizSetTitle: quizSets[currentSetIndex].title,
+                    quizIndex: currentIndex,
+                    questionText: currentQuiz.question,
+                    reason: reason.trim() || "理由の記載なし",
+                    reportedBy: currentUser ? (currentUser.displayName || currentUser.email) : "ゲスト",
+                    reporterUid: currentUser ? currentUser.uid : null,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                alert("通報を受け付けました。ご協力ありがとうございます。");
+            } catch (error) {
+                alert("通報の送信に失敗しました: " + error.message);
+            }
+        }
+
+        // --- フォーム・編集操作 ---
         function toggleForm() {
             const type = document.querySelector('input[name="quiz-type"]:checked').value;
             document.getElementById('choice-input-area').style.display = (type === 'choice') ? 'block' : 'none';
