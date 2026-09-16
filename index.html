@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>ログイン必須クイズアプリ</title>
+    <title>パスワード認証付きクイズアプリ</title>
     <!-- Firebase SDK (App, Firestore, Auth) の読み込み -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -20,11 +20,17 @@
         .logout-btn { background-color: #757575; color: white; }
 
         /* 未ログイン画面 */
-        #login-view { max-width: 400px; margin: 100px auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); text-align: center; }
-        #login-view h2 { margin-bottom: 10px; color: #333; }
-        #login-view p { color: #666; font-size: 14px; margin-bottom: 30px; }
-        .google-login-btn { width: 100%; padding: 14px; font-size: 16px; font-weight: bold; background-color: #4285f4; color: white; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
-        .google-login-btn:hover { background-color: #3367d6; }
+        #login-view { max-width: 360px; margin: 60px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); text-align: center; }
+        #login-view h2 { margin-bottom: 20px; color: #333; }
+        .auth-form-group { margin-bottom: 15px; text-align: left; }
+        .auth-form-group label { display: block; font-size: 13px; color: #666; margin-bottom: 5px; }
+        .auth-form-group input { width: 100%; padding: 10px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        .auth-btn-group { display: flex; gap: 10px; margin-top: 20px; }
+        .auth-btn-group button { flex: 1; padding: 12px; font-size: 15px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: 0.2s; }
+        .submit-login-btn { background-color: #4285f4; color: white; }
+        .submit-login-btn:hover { background-color: #3367d6; }
+        .submit-signup-btn { background-color: #34a853; color: white; }
+        .submit-signup-btn:hover { background-color: #2d9247; }
 
         /* ホーム画面 */
         #home-view { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
@@ -85,11 +91,21 @@
 </head>
 <body>
 
-    <!-- 未ログイン時の画面 -->
+    <!-- 未ログイン画面（メール・パスワード） -->
     <div id="login-view" class="view active">
-        <h2>🔒 ログインが必要です</h2>
-        <p>クイズアプリを利用するには、Googleアカウントでログインしてください。</p>
-        <button class="google-login-btn" onclick="login()">Googleでログイン</button>
+        <h2>🔒 ログイン</h2>
+        <div class="auth-form-group">
+            <label>メールアドレス</label>
+            <input type="email" id="auth-email" placeholder="example@email.com">
+        </div>
+        <div class="auth-form-group">
+            <label>パスワード (6文字以上)</label>
+            <input type="password" id="auth-password" placeholder="••••••••">
+        </div>
+        <div class="auth-btn-group">
+            <button class="submit-login-btn" onclick="loginWithPassword()">ログイン</button>
+            <button class="submit-signup-btn" onclick="signUpWithPassword()">新規登録</button>
+        </div>
     </div>
 
     <!-- ログイン管理バー（ログイン時のみ表示） -->
@@ -169,7 +185,7 @@
     <script>
         // --- Firebase 初期化 ---
         /* ⚠️ ご自身のFirebase設定を貼り付けてください */
-       const firebaseConfig = {
+        const firebaseConfig = {
   apiKey: "AIzaSyDWBeeMvqY-thtzyYlK4MoKemcJHYZG4cc",
   authDomain: "quiz-app-ver1.firebaseapp.com",
   projectId: "quiz-app-ver1",
@@ -196,9 +212,8 @@
             const authBar = document.getElementById('auth-bar');
 
             if (user) {
-                // ログイン状態：ヘッダーを表示し、コンテンツ画面を表示
                 authBar.style.display = 'flex';
-                userInfoEl.textContent = `👤 ${user.displayName || user.email}`;
+                userInfoEl.textContent = `👤 ${user.email}`;
                 
                 if (currentSetIndex === -1) {
                     showView('home-view');
@@ -208,16 +223,39 @@
                 renderHome();
                 if (currentSetIndex !== -1) displayQuiz();
             } else {
-                // 未ログイン状態：ログイン画面のみ表示
                 authBar.style.display = 'none';
                 currentSetIndex = -1;
                 showView('login-view');
             }
         });
 
-        function login() {
-            const provider = new firebase.auth.GoogleAuthProvider();
-            auth.signInWithPopup(provider).catch((error) => alert("ログインエラー: " + error.message));
+        // --- メール・パスワード認証処理 ---
+        async function loginWithPassword() {
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            if (!email || !password) { alert("メールアドレスとパスワードを入力してください。"); return; }
+
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+                document.getElementById('auth-password').value = '';
+            } catch (error) {
+                alert("ログインに失敗しました: " + error.message);
+            }
+        }
+
+        async function signUpWithPassword() {
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            if (!email || !password) { alert("メールアドレスとパスワードを入力してください。"); return; }
+            if (password.length < 6) { alert("パスワードは6文字以上で指定してください。"); return; }
+
+            try {
+                await auth.createUserWithEmailAndPassword(email, password);
+                alert("アカウントの作成が完了しました！");
+                document.getElementById('auth-password').value = '';
+            } catch (error) {
+                alert("登録に失敗しました: " + error.message);
+            }
         }
 
         function logout() {
@@ -299,7 +337,7 @@
                 title: title,
                 quizzes: [{ type: "choice", question: "最初の問題！", choices: ["A", "B"], correctAnswer: "A" }],
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                authorName: currentUser.displayName || currentUser.email,
+                authorName: currentUser.email,
                 authorId: currentUser.uid
             });
             titleInput.value = '';
@@ -428,7 +466,7 @@
                     quizIndex: currentIndex,
                     questionText: currentQuiz.question,
                     reason: reason.trim() || "理由の記載なし",
-                    reportedBy: currentUser ? (currentUser.displayName || currentUser.email) : "ゲスト",
+                    reportedBy: currentUser ? currentUser.email : "ゲスト",
                     reporterUid: currentUser ? currentUser.uid : null,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
