@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>通報機能付きクイズアプリ</title>
+    <title>ログイン必須クイズアプリ</title>
     <!-- Firebase SDK (App, Firestore, Auth) の読み込み -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -17,8 +17,14 @@
         .auth-bar { max-width: 600px; margin: 0 auto 15px auto; display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .user-info { font-size: 14px; font-weight: bold; color: #555; }
         .auth-btn { padding: 8px 16px; font-size: 14px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        .login-btn { background-color: #4285f4; color: white; }
         .logout-btn { background-color: #757575; color: white; }
+
+        /* 未ログイン画面 */
+        #login-view { max-width: 400px; margin: 100px auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); text-align: center; }
+        #login-view h2 { margin-bottom: 10px; color: #333; }
+        #login-view p { color: #666; font-size: 14px; margin-bottom: 30px; }
+        .google-login-btn { width: 100%; padding: 14px; font-size: 16px; font-weight: bold; background-color: #4285f4; color: white; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .google-login-btn:hover { background-color: #3367d6; }
 
         /* ホーム画面 */
         #home-view { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
@@ -56,7 +62,6 @@
         .incorrect { color: #dc3545; }
         #next-button { margin-top: 15px; width: 100%; padding: 12px; font-size: 16px; background-color: #ff9800; color: white; border: none; border-radius: 6px; cursor: pointer; display: none; font-weight: bold; }
         
-        /* 通報ボタンのスタイル */
         .report-btn { margin-top: 15px; background: none; border: none; color: #888; font-size: 12px; cursor: pointer; text-decoration: underline; }
         .report-btn:hover { color: #e53935; }
 
@@ -80,14 +85,21 @@
 </head>
 <body>
 
-    <!-- ログイン管理バー -->
-    <div class="auth-bar">
-        <div id="user-info" class="user-info">ゲスト閲覧中</div>
-        <button id="auth-btn" class="auth-btn login-btn" onclick="toggleAuth()">Googleでログイン</button>
+    <!-- 未ログイン時の画面 -->
+    <div id="login-view" class="view active">
+        <h2>🔒 ログインが必要です</h2>
+        <p>クイズアプリを利用するには、Googleアカウントでログインしてください。</p>
+        <button class="google-login-btn" onclick="login()">Googleでログイン</button>
+    </div>
+
+    <!-- ログイン管理バー（ログイン時のみ表示） -->
+    <div id="auth-bar" class="auth-bar" style="display: none;">
+        <div id="user-info" class="user-info"></div>
+        <button class="auth-btn logout-btn" onclick="logout()">ログアウト</button>
     </div>
 
     <!-- ホーム画面 -->
-    <div id="home-view" class="view active">
+    <div id="home-view" class="view">
         <span class="status-badge">⚡ リアルタイム同期中</span>
         <h2>📚 クイズ集一覧</h2>
         <ul id="quiz-set-list" class="set-list"></ul>
@@ -111,7 +123,6 @@
                 <div id="result"></div>
                 <button id="next-button" onclick="handleNextAction()">次の問題へ ＞</button>
                 
-                <!-- 通報ボタン -->
                 <button id="report-btn" class="report-btn" onclick="reportQuiz()">🚩 この問題を通報する</button>
 
                 <div id="edit-controls" style="display: none;">
@@ -158,7 +169,7 @@
     <script>
         // --- Firebase 初期化 ---
         /* ⚠️ ご自身のFirebase設定を貼り付けてください */
-        const firebaseConfig = {
+       const firebaseConfig = {
   apiKey: "AIzaSyDWBeeMvqY-thtzyYlK4MoKemcJHYZG4cc",
   authDomain: "quiz-app-ver1.firebaseapp.com",
   projectId: "quiz-app-ver1",
@@ -170,34 +181,47 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
 
+        // --- 画面切り替え関数 ---
+        function showView(viewId) {
+            document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+            document.getElementById(viewId).classList.add('active');
+        }
+
         // --- ログイン状態監視 ---
         let currentUser = null;
 
         auth.onAuthStateChanged((user) => {
             currentUser = user;
             const userInfoEl = document.getElementById('user-info');
-            const authBtnEl = document.getElementById('auth-btn');
+            const authBar = document.getElementById('auth-bar');
 
             if (user) {
+                // ログイン状態：ヘッダーを表示し、コンテンツ画面を表示
+                authBar.style.display = 'flex';
                 userInfoEl.textContent = `👤 ${user.displayName || user.email}`;
-                authBtnEl.textContent = "ログアウト";
-                authBtnEl.className = "auth-btn logout-btn";
+                
+                if (currentSetIndex === -1) {
+                    showView('home-view');
+                } else {
+                    showView('quiz-view');
+                }
+                renderHome();
+                if (currentSetIndex !== -1) displayQuiz();
             } else {
-                userInfoEl.textContent = "ゲスト閲覧中";
-                authBtnEl.textContent = "Googleでログイン";
-                authBtnEl.className = "auth-btn login-btn";
+                // 未ログイン状態：ログイン画面のみ表示
+                authBar.style.display = 'none';
+                currentSetIndex = -1;
+                showView('login-view');
             }
-            renderHome();
-            if (currentSetIndex !== -1) displayQuiz();
         });
 
-        function toggleAuth() {
-            if (currentUser) {
-                auth.signOut();
-            } else {
-                const provider = new firebase.auth.GoogleAuthProvider();
-                auth.signInWithPopup(provider).catch((error) => alert("ログインエラー: " + error.message));
-            }
+        function login() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).catch((error) => alert("ログインエラー: " + error.message));
+        }
+
+        function logout() {
+            auth.signOut();
         }
 
         // --- データ管理 ---
@@ -219,7 +243,7 @@
             snapshot.forEach((doc) => {
                 quizSets.push({ id: doc.id, ...doc.data() });
             });
-            renderHome();
+            if (currentUser) renderHome();
             
             if (currentSetIndex !== -1 && quizSets[currentSetIndex]) {
                 if (currentIndex >= quizSets[currentSetIndex].quizzes.length) {
@@ -266,7 +290,7 @@
         }
 
         async function createNewSet() {
-            if (!currentUser) { alert("クイズ集を作成するにはログインが必要です！"); return; }
+            if (!currentUser) return;
             const titleInput = document.getElementById('new-set-title');
             const title = titleInput.value.trim();
             if (title === "") { alert("クイズ集の名前を入力してください。"); return; }
@@ -293,16 +317,14 @@
 
         function openQuizSet(index) {
             currentSetIndex = index; currentIndex = 0; correctCount = 0; cancelEdit(); 
-            document.getElementById('home-view').classList.remove('active');
-            document.getElementById('quiz-view').classList.add('active');
+            showView('quiz-view');
             document.getElementById('current-set-title').textContent = quizSets[currentSetIndex].title;
             displayQuiz();
         }
 
         function goHome() {
             currentSetIndex = -1;
-            document.getElementById('quiz-view').classList.remove('active');
-            document.getElementById('home-view').classList.add('active');
+            showView('home-view');
         }
 
         // --- クイズ表示 ---
@@ -397,7 +419,7 @@
             const currentQuiz = quizSets[currentSetIndex].quizzes[currentIndex];
             const reason = prompt("この問題を通報する理由を入力してください（不適切な表現、誤りなど）:");
             
-            if (reason === null) return; // キャンセルされた場合は中断
+            if (reason === null) return;
 
             try {
                 await db.collection("reports").add({
