@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>パスワード認証付きクイズアプリ</title>
+    <title>ニックネーム対応クイズアプリ</title>
     <!-- Firebase SDK (App, Firestore, Auth) の読み込み -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -20,7 +20,7 @@
         .logout-btn { background-color: #757575; color: white; }
 
         /* 未ログイン画面 */
-        #login-view { max-width: 360px; margin: 60px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); text-align: center; }
+        #login-view { max-width: 360px; margin: 40px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); text-align: center; }
         #login-view h2 { margin-bottom: 20px; color: #333; }
         .auth-form-group { margin-bottom: 15px; text-align: left; }
         .auth-form-group label { display: block; font-size: 13px; color: #666; margin-bottom: 5px; }
@@ -91,9 +91,13 @@
 </head>
 <body>
 
-    <!-- 未ログイン画面（メール・パスワード） -->
+    <!-- 未ログイン画面（メール・パスワード・ニックネーム） -->
     <div id="login-view" class="view active">
-        <h2>🔒 ログイン</h2>
+        <h2>🔒 ログイン / 会員登録</h2>
+        <div class="auth-form-group">
+            <label>ニックネーム (新規登録時に反映)</label>
+            <input type="text" id="auth-nickname" placeholder="例: クイズ太郎">
+        </div>
         <div class="auth-form-group">
             <label>メールアドレス</label>
             <input type="email" id="auth-email" placeholder="example@email.com">
@@ -192,7 +196,7 @@
   storageBucket: "quiz-app-ver1.firebasestorage.app",
   messagingSenderId: "266883152076",
   appId: "1:266883152076:web:8cd9d12c594564b056ea69"
-};
+};        
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
@@ -213,7 +217,7 @@
 
             if (user) {
                 authBar.style.display = 'flex';
-                userInfoEl.textContent = `👤 ${user.email}`;
+                userInfoEl.textContent = `👤 ${user.displayName || user.email}`;
                 
                 if (currentSetIndex === -1) {
                     showView('home-view');
@@ -229,7 +233,7 @@
             }
         });
 
-        // --- メール・パスワード認証処理 ---
+        // --- メール・パスワード・ニックネーム認証処理 ---
         async function loginWithPassword() {
             const email = document.getElementById('auth-email').value.trim();
             const password = document.getElementById('auth-password').value;
@@ -244,15 +248,24 @@
         }
 
         async function signUpWithPassword() {
+            const nickname = document.getElementById('auth-nickname').value.trim();
             const email = document.getElementById('auth-email').value.trim();
             const password = document.getElementById('auth-password').value;
+
+            if (!nickname) { alert("ニックネームを入力してください。"); return; }
             if (!email || !password) { alert("メールアドレスとパスワードを入力してください。"); return; }
             if (password.length < 6) { alert("パスワードは6文字以上で指定してください。"); return; }
 
             try {
-                await auth.createUserWithEmailAndPassword(email, password);
-                alert("アカウントの作成が完了しました！");
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                // 登録後に Firebase Auth のプロフィール（displayName）を更新
+                await userCredential.user.updateProfile({
+                    displayName: nickname
+                });
+                
+                alert("アカウント作成が完了しました！");
                 document.getElementById('auth-password').value = '';
+                document.getElementById('auth-nickname').value = '';
             } catch (error) {
                 alert("登録に失敗しました: " + error.message);
             }
@@ -337,7 +350,7 @@
                 title: title,
                 quizzes: [{ type: "choice", question: "最初の問題！", choices: ["A", "B"], correctAnswer: "A" }],
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                authorName: currentUser.email,
+                authorName: currentUser.displayName || currentUser.email,
                 authorId: currentUser.uid
             });
             titleInput.value = '';
@@ -466,7 +479,7 @@
                     quizIndex: currentIndex,
                     questionText: currentQuiz.question,
                     reason: reason.trim() || "理由の記載なし",
-                    reportedBy: currentUser ? currentUser.email : "ゲスト",
+                    reportedBy: currentUser ? (currentUser.displayName || currentUser.email) : "ゲスト",
                     reporterUid: currentUser ? currentUser.uid : null,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
